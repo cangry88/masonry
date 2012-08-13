@@ -69,6 +69,9 @@
 
   $.Mason.settings = {
     isResizable: true,
+    isDraggable: false,
+    dragHandleSelector: null,
+    dragClass: null,
     isAnimated: false,
     animationOptions: {
       queue: false,
@@ -147,8 +150,14 @@
       // need to get bricks
       this.reloadItems();
 
+      // set up dragging
+      if (this.options.isDraggable ){
+        this._initDrag(this.$bricks);
+      }
+
     },
-  
+
+
     // _init fires when instance is first created
     // and when instance is triggered again -> $el.masonry();
     _init : function( callback ) {
@@ -452,6 +461,118 @@
       
       $(window).unbind('.masonry');
 
+    },
+
+    _getDistanceBetween : function(point1, point2){
+        var dx = point1.x - point2.x,
+            dy = point1.y - point2.y;
+        return Math.sqrt(dx*dx + dy*dy);
+    },
+
+    _getBrickPoint : function($brick){
+      var offset = $brick.offset();
+      return {
+        $brick: $brick,
+        x  : offset.left + ($brick.outerWidth()/2),
+        y : offset.top + ($brick.outerHeight()/2)
+      };
+    },
+
+    _getClosestBrick : function(brick){
+
+      var $brick = $(brick),
+          _this = this,
+          dPoint = this._getBrickPoint($brick),
+          closest = null,
+          point, dist, $b, last, midpoint;
+
+      // find the index of the closest brick
+      this.$bricks.each(function(i, b){
+
+        $b = $(b);
+        point = _this._getBrickPoint($b);
+
+        // first check the distance from the brick center
+        dist = _this._getDistanceBetween(dPoint, point);
+
+        if(closest === null || dist < closest.dist){
+          closest = {
+            dist: dist,
+            $brick: $b,
+            index: (point.x > dPoint.x) ? i : i+1
+          };
+        }
+
+        // get the distance between the center of the line
+        // connecting the current and last block
+        if(typeof last !== 'undefined'){
+          midpoint = {
+            x : (last.x + point.x) / 2,
+            y : (last.y + point.y) / 2
+          };
+          dist = _this._getDistanceBetween(dPoint, midpoint);
+          if(dist < closest.dist){
+            closest = {
+              dist: dist,
+              $brick: $b,
+              index: (point.x > dPoint.x) ? i : i+1
+            };
+          }
+        }
+
+        last = point;
+
+      });
+
+      return closest;
+    },
+
+    _initDrag : function($bricks){
+
+      var _this = this,
+          dragged = null,
+          pos, closest;
+
+      $bricks.bind('dragstart', function(e) {
+
+        // make sure we're dragging by the right thing
+        if(_this.options.dragHandleSelector !== null && !$(e.target).is(_this.options.dragHandleSelector)){
+          return false;
+        }
+
+        pos = $(this).position();
+
+        // add the dragClass
+        if(_this.options.dragClass !== null){
+          $(this).addClass(_this.options.dragClass);
+        }
+
+        // remove the brick being dragged from the array
+        dragged = this;
+        _this.$bricks = _this.$bricks.not(this);
+        _this._reLayout();
+
+      }).bind('drag', function(e, dd) {
+
+        $(this).css({
+          top  : pos.top  + dd.deltaY,
+          left : pos.left + dd.deltaX
+        });
+
+      }).bind('dragend', function(e) {
+        
+        // remove the dragClass
+        if(_this.options.dragClass !== null){
+          $(this).removeClass(_this.options.dragClass);
+        }
+
+        // insert the brick back into the array
+        closest = _this._getClosestBrick(dragged);
+        _this.$bricks.splice(closest.index , 0, dragged);
+        dragged = null;
+
+        _this._reLayout();
+      });
     }
     
   };
